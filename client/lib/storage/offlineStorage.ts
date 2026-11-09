@@ -128,6 +128,33 @@ class OfflineStorageService {
     });
   }
 
+  async updateReportPdf(localId: string, pdfBase64: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction('reports', 'readwrite');
+      const store = tx.objectStore('reports');
+      const request = store.index('localId').get(localId);
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const report = request.result as StoredReport | undefined;
+        if (!report) {
+          reject(new Error(`Rapport local introuvable: ${localId}`));
+          return;
+        }
+        report.pdfBase64 = pdfBase64;
+        report.updatedAt = new Date().toISOString();
+        const update = store.put(report);
+        update.onerror = () => reject(update.error);
+      };
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || new Error('PDF local non enregistré'));
+    });
+  }
+
   async getPendingReports(): Promise<StoredReport[]> {
     if (!this.db) throw new Error('Database not initialized');
 
