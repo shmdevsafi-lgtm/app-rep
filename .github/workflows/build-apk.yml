@@ -31,7 +31,13 @@ jobs:
         run: pnpm install --no-frozen-lockfile
 
       - name: Build web app
-        run: pnpm run build:client
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          test -n "$VITE_SUPABASE_URL" || (echo "Missing VITE_SUPABASE_URL: configure it as a GitHub Actions variable or secret." && exit 1)
+          test -n "$VITE_SUPABASE_ANON_KEY" || (echo "Missing VITE_SUPABASE_ANON_KEY: configure it as a GitHub Actions variable or secret." && exit 1)
+          pnpm run build:client
 
       - name: Setup Java
         uses: actions/setup-java@v4
