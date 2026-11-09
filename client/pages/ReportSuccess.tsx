@@ -4,8 +4,8 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, CheckCircle2, Download, Home, Copy, Check } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { ArrowRight, CheckCircle2, Download, Home, Share2 } from "lucide-react";
+import { offlineStorage } from "@/lib/storage/offlineStorage";
 
 type Logo = string;
 
@@ -36,9 +36,7 @@ export default function ReportSuccess() {
   const navigate = useNavigate();
   const reportRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
-  const [publicPdfUrl, setPublicPdfUrl] = useState<string | null>(null);
-  const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
-  const [copied, setCopied] = useState(false);
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [debugError, setDebugError] = useState<string | null>(null);
   const state = (location.state as ReportState) || {};
   const report = state.report || {};
@@ -83,75 +81,69 @@ export default function ReportSuccess() {
     return pdf.output("blob");
   };
 
-  const uploadPdfToSupabase = async (blob: Blob): Promise<string> => {
-    const fileName = `${crypto.randomUUID()}.pdf`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("reports-pdfs")
-      .upload(fileName, blob, { contentType: "application/pdf", upsert: false });
-
-    if (uploadError) {
-      throw new Error(`Échec upload Storage: ${describeError(uploadError)}`);
-    }
-
-    const { data: publicUrlData } = supabase.storage.from("reports-pdfs").getPublicUrl(fileName);
-    const publicUrl = publicUrlData?.publicUrl;
-    if (!publicUrl) {
-      throw new Error("Upload réussi mais URL publique introuvable (bucket privé ?)");
-    }
-
-    const reportId = state.supabaseId;
-    const localId = (report as any).localId as string | undefined;
-
-    let updateError = null;
-    if (reportId) {
-      const { error } = await supabase.from("reports").update({ pdf_url: publicUrl }).eq("id", reportId);
-      updateError = error;
-    } else if (localId) {
-      const { error } = await supabase.from("reports").update({ pdf_url: publicUrl }).eq("local_id", localId);
-      updateError = error;
-    } else {
-      throw new Error("Aucun identifiant (supabaseId/localId) pour retrouver la ligne à mettre à jour");
-    }
-
-    if (updateError) {
-      throw new Error(`PDF uploadé mais échec écriture pdf_url: ${describeError(updateError)}`);
-    }
-
-    return publicUrl;
-  };
-
-  const generateAndUpload = async () => {
+  const prepareLocalPdf = async () => {
     setIsExporting(true);
     setDebugError(null);
     try {
+      // Keep the existing A4 PDF rendering pipeline unchanged.
       const blob = await generatePdfBlob();
-      if (!blob) {
-        setDebugError("Impossible de capturer le contenu du rapport.");
-        return;
-      }
+      if (!blob) throw new Error("Impossible de capturer le contenu du rapport.");
 
-      setUploadStatus("uploading");
-      const url = await uploadPdfToSupabase(blob);
-      setPublicPdfUrl(url);
-      setUploadStatus("done");
+      const localId = typeof report.localId === "string" ? report.localId : undefined;
+      if (!localId) throw new Error("Identifiant local du rapport introuvable.");
+
+      const reader = new FileReader();
+      const pdfBase64 = await new Promise<string>((resolve, reject) => {
+        reader.onerror = () => reject(reader.error || new Error("Lecture du PDF impossible"));
+        reader.onload = () => {
+          const result = String(reader.result || "");
+          const separator = result.indexOf(",");
+          if (separator < 0) reject(new Error("Format PDF local invalide"));
+          else resolve(result.slice(separator + 1));
+        };
+        reader.readAsDataURL(blob);
+      });
+
+      await offlineStorage.updateReportPdf(localId, pdfBase64);
+      setPdfBlob(blob);
     } catch (error) {
-      console.error("Erreur génération/upload PDF:", error);
+      console.error("Erreur préparation PDF local:", error);
       setDebugError(describeError(error));
-      setUploadStatus("error");
     } finally {
       setIsExporting(false);
     }
   };
 
-  const copyUrl = async () => {
-    if (!publicPdfUrl) return;
+  const getPdfFileName = () => {
+    const safeTitle = title.replace(/[^a-z0-9\u0600-\u06FF_-]+/gi, "_").slice(0, 60) || "rapport";
+    return `${safeTitle}.pdf`;
+  };
+
+  const downloadPdf = () => {
+    if (!pdfBlob) return;
+    const objectUrl = URL.createObjectURL(pdfBlob);
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = getPdfFileName();
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+  };
+
+  const sharePdf = async () => {
+    if (!pdfBlob) return;
+    const file = new File([pdfBlob], getPdfFileName(), { type: "application/pdf" });
     try {
-      await navigator.clipboard.writeText(publicPdfUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // clipboard indisponible : l'utilisateur peut toujours sélectionner le texte manuellement
+      if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+        await navigator.share({ title, files: [file] });
+        return;
+      }
+      downloadPdf();
+      setDebugError("Le partage de fichier n'est pas disponible sur cet appareil. Le PDF a été téléchargé pour être partagé manuellement.");
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") return;
+      setDebugError("Le partage a échoué. Le PDF reste disponible localement : utilisez Télécharger.");
     }
   };
 
@@ -169,37 +161,25 @@ export default function ReportSuccess() {
                 <h1 className="text-2xl font-black text-slate-900">{title}</h1>
               </div>
             </div>
-            <Button onClick={generateAndUpload} disabled={isExporting} className="gap-2 rounded-xl px-6 py-6 font-black">
-              <Download size={18} />
-              {isExporting ? "جاري تجهيز PDF..." : "إنشاء رابط PDF"}
-            </Button>
+            {!pdfBlob ? (
+              <Button onClick={prepareLocalPdf} disabled={isExporting} className="gap-2 rounded-xl px-6 py-6 font-black">
+                <Download size={18} />
+                {isExporting ? "جاري تجهيز PDF..." : "تحضير PDF محلياً"}
+              </Button>
+            ) : (
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Button onClick={downloadPdf} className="gap-2 rounded-xl px-6 py-6 font-black">
+                  <Download size={18} /> تنزيل PDF
+                </Button>
+                <Button onClick={sharePdf} variant="outline" className="gap-2 rounded-xl px-6 py-6 font-black">
+                  <Share2 size={18} /> مشاركة PDF
+                </Button>
+              </div>
+            )}
           </div>
 
-          {uploadStatus === "uploading" && (
-            <p className="mt-4 text-sm font-bold text-amber-600">جاري رفع PDF إلى الخادم...</p>
-          )}
-
-          {uploadStatus === "done" && publicPdfUrl && (
-            <div className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-              <p className="mb-2 text-sm font-black text-emerald-700">✓ تم إنشاء الرابط — انسخه وافتحه في المتصفح:</p>
-              <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-white p-3">
-                <input
-                  type="text"
-                  readOnly
-                  value={publicPdfUrl}
-                  onFocus={(e) => e.currentTarget.select()}
-                  dir="ltr"
-                  className="flex-1 bg-transparent text-xs font-mono text-slate-700 outline-none"
-                />
-                <button
-                  onClick={copyUrl}
-                  className="flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700"
-                >
-                  {copied ? <Check size={14} /> : <Copy size={14} />}
-                  {copied ? "تم النسخ" : "نسخ"}
-                </button>
-              </div>
-            </div>
+          {pdfBlob && (
+            <p className="mt-4 text-sm font-bold text-emerald-700">تم حفظ ملف PDF محلياً. يمكنك تنزيله أو مشاركته دون اتصال بالإنترنت.</p>
           )}
         </div>
 
