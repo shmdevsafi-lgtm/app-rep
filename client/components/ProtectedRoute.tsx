@@ -1,5 +1,6 @@
 import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
+import { hasValidOfflineSession } from "@/lib/auth/offlineSession";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -7,10 +8,8 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const location = useLocation();
-  const isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
 
-  if (!isLoggedIn) {
-    // Redirect to login but save current location to return after login
+  if (!hasValidOfflineSession()) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
