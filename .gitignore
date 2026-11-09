@@ -45,4 +45,3 @@ capacitor.config.json.production
 secrets.json
 
 .config/
-!.env
