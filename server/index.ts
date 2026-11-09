@@ -30,6 +30,26 @@ export function createServer() {
     next();
   });
 
+  // Compare the five login fields against Netlify runtime environment variables.
+  app.post("/api/login", (req, res) => {
+    const lastName = process.env.AUTH_LAST_NAME;
+    const firstName = process.env.AUTH_FIRST_NAME;
+    const birthDate = process.env.AUTH_BIRTH_DATE;
+    const pin = process.env.AUTH_PIN;
+    const password = process.env.AUTH_PASSWORD;
+    if ([lastName, firstName, birthDate, pin, password].some((v) => !v)) {
+      return res.status(503).json({ ok: false, error: "Connexion non configurée" });
+    }
+    const body = req.body ?? {};
+    const clean = (v: unknown) => typeof v === "string" ? v.trim() : "";
+    const ok =
+      clean(body.lastName).toLowerCase() === lastName!.trim().toLowerCase() &&
+      clean(body.firstName).toLowerCase() === firstName!.trim().toLowerCase() &&
+      clean(body.birthDate) === birthDate!.trim() &&
+      clean(body.pin) === pin!.trim() &&
+      typeof body.password === "string" && body.password === password;
+    return res.json({ ok });
+  });
   // Example API routes
   app.get("/api/ping", (_req, res) => {
     const ping = process.env.PING_MESSAGE ?? "ping";
