@@ -1,11 +1,12 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { isSessionValid } from "@/lib/auth";
 
 export default function Index() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
+    const isLoggedIn = isSessionValid();
     if (isLoggedIn) {
       navigate("/dashboard");
     } else {
