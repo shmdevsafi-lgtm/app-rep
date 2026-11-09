@@ -17,6 +17,9 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  # PING_MESSAGE is public display text, not an authentication credential.
+  # Keep secrets scanning enabled for all other environment variables.
+  SECRETS_SCAN_OMIT_KEYS = "PING_MESSAGE"
 
 # Security headers
 [[headers]]
