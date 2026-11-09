@@ -7,7 +7,6 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { offlineStorage } from "@/lib/storage/offlineStorage";
 import { syncManager } from "@/lib/sync/syncManager";
@@ -45,8 +44,7 @@ const App = () => {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <TooltipProvider>
+      <TooltipProvider>
           <Toaster />
           <Sonner />
           <BrowserRouter>
@@ -71,8 +69,7 @@ const App = () => {
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
-        </TooltipProvider>
-      </AuthProvider>
+      </TooltipProvider>
     </QueryClientProvider>
   );
 };
