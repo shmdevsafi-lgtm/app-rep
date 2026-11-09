@@ -1,12 +1,13 @@
 import { Link } from "react-router-dom";
 import { Menu } from "lucide-react";
+import { isSessionValid } from "@/lib/auth";
 
 interface HeaderProps {
   onMenuClick: () => void;
 }
 
 export default function Header({ onMenuClick }: HeaderProps) {
-  const isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
+  const isLoggedIn = isSessionValid();
 
   return (
     <header className="bg-white border-b border-gray-100 px-6 py-4 sticky top-0 z-30 shadow-sm">
