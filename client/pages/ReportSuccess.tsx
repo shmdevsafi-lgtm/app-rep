@@ -4,8 +4,9 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, CheckCircle2, Download, Home, Copy, Check } from "lucide-react";
+import { ArrowRight, CheckCircle2, Download, Home, Copy, Check, Share2, FileDown } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { downloadPdf, sharePdf } from "@/lib/pdfFile";
 
 type Logo = string;
 
@@ -40,6 +41,9 @@ export default function ReportSuccess() {
   const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
   const [copied, setCopied] = useState(false);
   const [debugError, setDebugError] = useState<string | null>(null);
+  const pdfBlobRef = useRef<Blob | null>(null);
+  const [busy, setBusy] = useState<"" | "share" | "download">("");
+  const [notice, setNotice] = useState<string | null>(null);
   const state = (location.state as ReportState) || {};
   const report = state.report || {};
   const title = state.title || valueOf(report, "title");
@@ -155,6 +159,38 @@ export default function ReportSuccess() {
     }
   };
 
+  const getBlob = async (): Promise<Blob> => {
+    if (!pdfBlobRef.current) pdfBlobRef.current = await generatePdfBlob();
+    if (!pdfBlobRef.current) throw new Error("Impossible de générer le PDF.");
+    return pdfBlobRef.current;
+  };
+
+  const handleDownload = async () => {
+    setBusy("download");
+    setNotice(null);
+    setDebugError(null);
+    try {
+      setNotice(await downloadPdf(await getBlob()));
+    } catch (e) {
+      setDebugError(describeError(e));
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const handleShare = async () => {
+    setBusy("share");
+    setNotice(null);
+    setDebugError(null);
+    try {
+      await sharePdf(await getBlob(), title);
+    } catch (e) {
+      setDebugError(describeError(e));
+    } finally {
+      setBusy("");
+    }
+  };
+
   return (
     <Layout>
       <div className="mx-auto max-w-5xl space-y-8">
@@ -169,15 +205,26 @@ export default function ReportSuccess() {
                 <h1 className="text-2xl font-black text-slate-900">{title}</h1>
               </div>
             </div>
-            <Button onClick={generateAndUpload} disabled={isExporting} className="gap-2 rounded-xl px-6 py-6 font-black">
-              <Download size={18} />
-              {isExporting ? "جاري تجهيز PDF..." : "إنشاء رابط PDF"}
-            </Button>
+            <div className="flex flex-wrap gap-3">
+              <Button onClick={handleShare} disabled={busy !== ""} className="gap-2 rounded-xl px-5 py-6 font-black">
+                <Share2 size={18} />
+                {busy === "share" ? "جاري التحضير..." : "مشاركة"}
+              </Button>
+              <Button onClick={handleDownload} disabled={busy !== ""} variant="outline" className="gap-2 rounded-xl px-5 py-6 font-black">
+                <FileDown size={18} />
+                {busy === "download" ? "جاري التحضير..." : "تحميل PDF"}
+              </Button>
+              <Button onClick={generateAndUpload} disabled={isExporting} variant="outline" className="gap-2 rounded-xl px-5 py-6 font-black">
+                <Download size={18} />
+                {isExporting ? "جاري تجهيز PDF..." : "إنشاء رابط PDF"}
+              </Button>
+            </div>
           </div>
 
           {uploadStatus === "uploading" && (
             <p className="mt-4 text-sm font-bold text-amber-600">جاري رفع PDF إلى الخادم...</p>
           )}
+          {notice && <p className="mt-4 text-sm font-bold text-emerald-700">{notice}</p>}
 
           {uploadStatus === "done" && publicPdfUrl && (
             <div className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
