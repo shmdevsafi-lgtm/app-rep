@@ -11,7 +11,7 @@
  * `content` d'offlineStorage, puis désérialisé ici avant l'envoi.
  */
 
-import { supabase } from '../supabase';
+import { supabase, isSupabaseConfigured } from '../supabase';
 import { offlineStorage, StoredReport, StoredSession } from '../storage/offlineStorage';
 
 // Extrait un message lisible d'une erreur Supabase (objet PostgREST
@@ -62,6 +62,11 @@ class SyncManager {
   private syncInterval: NodeJS.Timeout | null = null;
 
   async init(): Promise<void> {
+    if (!isSupabaseConfigured) {
+      console.info('☁️ Supabase is not configured; local offline mode remains active.');
+      return;
+    }
+
     console.log('🔄 SyncManager initialized');
 
     offlineStorage.onlineListener(async (online) => {
@@ -83,6 +88,8 @@ class SyncManager {
   }
 
   async syncAll(): Promise<void> {
+    if (!isSupabaseConfigured) return;
+
     if (this.isSyncing) {
       console.log('⏳ Sync already in progress, skipping...');
       return;
