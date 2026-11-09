@@ -29,3 +29,16 @@ export function getSupabaseAdmin(): SupabaseClient {
 
   return adminClient;
 }
+
+export async function ensureBucketExists(bucketName: string) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data: buckets, error: listError } = await supabaseAdmin.storage.listBuckets();
+  if (listError) throw new Error("Unable to inspect Supabase storage buckets");
+
+  if (!buckets?.some((bucket) => bucket.name === bucketName)) {
+    const { error } = await supabaseAdmin.storage.createBucket(bucketName, {
+      public: false,
+    });
+    if (error) throw new Error("Unable to create private storage bucket");
+  }
+}
