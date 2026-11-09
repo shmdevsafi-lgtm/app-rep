@@ -9,6 +9,7 @@ import {
   HardDriveDownload,
   LogOut,
 } from "lucide-react";
+import { clearSession } from "@/lib/auth";
 
 interface SidebarProps {
   open: boolean;
@@ -34,7 +35,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   }, [location.pathname]);
 
   const handleLogout = () => {
-    localStorage.removeItem("isLoggedIn");
+    clearSession();
     onClose();
     navigate("/login");
   };
