@@ -182,5 +182,5 @@ Besoin d'aide pour la migration?
 ---
 
 **Release créée**: 2026-08-21  
-**Responsable**: Adnane (SHM)  
+**Responsable**: Équipe SHM  
 **Statut**: Production-ready ✅
