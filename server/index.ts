@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
+import { timingSafeEqual } from "node:crypto";
 import { handleGenerateSession } from "./routes/generate-session";
 import { handleSaveReport } from "./routes/save-report";
 import { handleListReports } from "./routes/list-reports";
@@ -37,9 +38,12 @@ export function createServer() {
 
   const requireApiKey = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const key = process.env.REPORTS_API_KEY;
-    if (!key) return next();
-    const provided = req.headers["x-api-key"] ?? req.query["api_key"];
-    if (provided !== key) return res.status(401).json({ error: "Non autorise" });
+    if (!key) return res.status(503).json({ error: "Serveur non configuré" });
+    const provided = req.headers["x-api-key"];
+    if (typeof provided !== "string" || provided.length !== key.length ||
+        !timingSafeEqual(Buffer.from(provided), Buffer.from(key))) {
+      return res.status(401).json({ error: "Non autorise" });
+    }
     return next();
   };
 
