@@ -228,4 +228,4 @@ MIT © 2026 Scoutisme Hassania Marocain
 
 ---
 
-**Fait avec ❤️ par Adnane pour le SHM**
+**Fait avec ❤️ par l’équipe SHM**
