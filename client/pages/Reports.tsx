@@ -1,189 +1,193 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import Layout from "@/components/Layout";
-import { supabase } from "@/lib/supabase";
+import { Button } from "@/components/ui/button";
+import { Download, Share2, FileText, CalendarDays } from "lucide-react";
+import { offlineStorage } from "@/lib/storage/offlineStorage";
 
-interface Report {
+interface LocalReport {
   id: string;
+  localId: string;
   title: string;
-  location: string;
-  time: string;
-  pdf_url?: string;
-  created_at: string;
+  content: string;
+  date: string;
+  pdfBase64?: string;
+  syncStatus: "pending" | "synced" | "failed";
+  createdAt: string;
+  details: Record<string, unknown>;
 }
 
-interface Session {
+interface LocalSession {
   id: string;
+  localId: string;
   title: string;
-  location: string;
-  date_time: string;
-  objective?: string;
-  target_audience?: string;
-  created_at: string;
+  description: string;
+  date: string;
+  syncStatus: "pending" | "synced" | "failed";
+  createdAt: string;
+  details: Record<string, unknown>;
+}
+
+function parseDetails(value: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function textValue(value: unknown, fallback = "—"): string {
+  return typeof value === "string" || typeof value === "number" ? String(value) : fallback;
+}
+
+function pdfBlobFromBase64(base64: string): Blob {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new Blob([bytes], { type: "application/pdf" });
+}
+
+function safeFileName(title: string): string {
+  return (title.replace(/[^a-z0-9\u0600-\u06FF_-]+/gi, "_").slice(0, 60) || "document") + ".pdf";
+}
+
+function downloadLocalPdf(base64: string, title: string): void {
+  const blob = pdfBlobFromBase64(base64);
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = safeFileName(title);
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+}
+
+async function shareLocalPdf(base64: string, title: string): Promise<void> {
+  const file = new File([pdfBlobFromBase64(base64)], safeFileName(title), { type: "application/pdf" });
+  if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+    await navigator.share({ title, files: [file] });
+    return;
+  }
+  downloadLocalPdf(base64, title);
+  window.alert("Le partage de fichier n'est pas disponible sur cet appareil. Le PDF a été téléchargé pour être partagé manuellement.");
 }
 
 export default function Reports() {
-  const [reports, setReports] = useState<Report[]>([]);
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const [reports, setReports] = useState<LocalReport[]>([]);
+  const [sessions, setSessions] = useState<LocalSession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"reports" | "sessions">("reports");
-  const [debugError, setDebugError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchData = async () => {
+    let cancelled = false;
+    const loadLocalDocuments = async () => {
       setLoading(true);
-      setDebugError(null);
+      setLoadError(null);
       try {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-        if (!supabaseUrl || !supabaseKey) {
-          setDebugError(
-            `Variables manquantes: URL=${supabaseUrl ? "OK" : "VIDE"}, KEY=${supabaseKey ? "OK" : "VIDE"}`
-          );
-          setLoading(false);
-          return;
-        }
-
-        // Requêtes directes à Supabase (clé anon) au lieu de passer
-        // par un serveur Express, qui n'existe pas dans l'APK.
-        const [reportsResult, sessionsResult] = await Promise.all([
-          supabase.from("reports").select("*").order("created_at", { ascending: false }),
-          supabase.from("sessions").select("*").order("created_at", { ascending: false }),
+        await offlineStorage.init();
+        const [storedReports, storedSessions] = await Promise.all([
+          offlineStorage.getAllReports(),
+          offlineStorage.getAllSessions(),
         ]);
-
-        if (reportsResult.error) {
-          setDebugError(`Erreur reports: ${JSON.stringify(reportsResult.error)}`);
-          throw reportsResult.error;
-        }
-        if (sessionsResult.error) {
-          setDebugError(`Erreur sessions: ${JSON.stringify(sessionsResult.error)}`);
-          throw sessionsResult.error;
-        }
-
-        setReports(reportsResult.data || []);
-        setSessions(sessionsResult.data || []);
-      } catch (error: any) {
-        console.error("Error fetching data:", error);
-        const message = error?.message || (typeof error === "string" ? error : JSON.stringify(error));
-        setDebugError((prev) => prev || `Exception: ${message}`);
+        if (cancelled) return;
+        setReports(storedReports.map((item) => ({
+          ...item,
+          details: parseDetails(item.content),
+        })));
+        setSessions(storedSessions.map((item) => ({
+          ...item,
+          details: parseDetails(item.description),
+        })));
+      } catch (error) {
+        console.error("Local documents loading failed:", error);
+        if (!cancelled) setLoadError("تعذر تحميل الوثائق المخزنة على هذا الجهاز.");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
-    fetchData();
+    loadLocalDocuments();
+    return () => { cancelled = true; };
   }, []);
+
+  const statusLabel = (status: LocalReport["syncStatus"]) => {
+    if (status === "synced") return "تمت المزامنة";
+    if (status === "failed") return "تعذرت المزامنة";
+    return "بانتظار المزامنة";
+  };
 
   return (
     <Layout>
       <div className="mb-12 animate-in fade-in duration-700">
-        <h1 className="text-4xl font-black shm-text-gradient mb-4 uppercase tracking-wider">
-          إدارة الوثائق
-        </h1>
+        <h1 className="text-4xl font-black shm-text-gradient mb-4 uppercase tracking-wider">إدارة الوثائق</h1>
         <div className="w-20 h-1.5 shm-gradient rounded-full"></div>
+        <p className="mt-4 text-sm font-bold text-gray-400">الوثائق المحفوظة على هذا الجهاز — متاحة دون اتصال بالإنترنت</p>
       </div>
 
-      <div className="flex bg-gray-50 p-2 rounded-2xl mb-10 w-fit animate-in slide-in-from-right-4 duration-500">
-        <button
-          onClick={() => setActiveTab("reports")}
-          className={`px-8 py-3 font-black uppercase tracking-widest text-sm transition-all rounded-xl ${
-            activeTab === "reports"
-              ? "bg-white text-primary shadow-sm"
-              : "text-gray-400 hover:text-gray-600"
-          }`}
-        >
-          التقارير
-        </button>
-        <button
-          onClick={() => setActiveTab("sessions")}
-          className={`px-8 py-3 font-black uppercase tracking-widest text-sm transition-all rounded-xl ${
-            activeTab === "sessions"
-              ? "bg-white text-secondary shadow-sm"
-              : "text-gray-400 hover:text-gray-600"
-          }`}
-        >
-          الحصص
-        </button>
+      <div className="flex bg-gray-50 p-2 rounded-2xl mb-10 w-fit">
+        <button onClick={() => setActiveTab("reports")} className={`px-8 py-3 font-black uppercase tracking-widest text-sm rounded-xl ${activeTab === "reports" ? "bg-white text-primary shadow-sm" : "text-gray-400"}`}>التقارير</button>
+        <button onClick={() => setActiveTab("sessions")} className={`px-8 py-3 font-black uppercase tracking-widest text-sm rounded-xl ${activeTab === "sessions" ? "bg-white text-secondary shadow-sm" : "text-gray-400"}`}>الحصص</button>
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-24">
-          <div className="animate-spin rounded-full h-14 w-14 border-b-4 border-primary"></div>
-        </div>
-      ) : debugError ? (
-        <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6 text-right" dir="ltr">
-          <p className="font-black text-red-700 mb-2">DEBUG ERROR:</p>
-          <p className="text-xs text-red-600 break-all font-mono">{debugError}</p>
-        </div>
+        <div className="flex justify-center py-24"><div className="animate-spin rounded-full h-14 w-14 border-b-4 border-primary"></div></div>
+      ) : loadError ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center font-bold text-red-700">{loadError}</div>
+      ) : activeTab === "reports" ? (
+        reports.length ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {reports.map((report) => (
+              <div key={report.id} className="shm-card group">
+                <div className="w-12 h-12 shm-gradient text-white rounded-xl flex items-center justify-center mb-6"><FileText size={22} /></div>
+                <h3 className="font-black text-xl mb-3 text-gray-800 line-clamp-2 min-h-[3.5rem]">{report.title}</h3>
+                <div className="text-sm text-gray-400 font-bold space-y-2 mb-5 border-t border-gray-50 pt-4">
+                  <p>📍 {textValue(report.details.location)}</p>
+                  <p>📅 {new Date(report.date || report.createdAt).toLocaleDateString("ar-MA")}</p>
+                  <p className="text-xs">{statusLabel(report.syncStatus)}</p>
+                </div>
+                {report.pdfBase64 ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button onClick={() => downloadLocalPdf(report.pdfBase64!, report.title)} className="gap-2 rounded-xl text-xs font-black"><Download size={16} /> تنزيل</Button>
+                    <Button onClick={() => shareLocalPdf(report.pdfBase64!, report.title).catch((error) => {
+                      if (!(error instanceof Error && error.name === "AbortError")) window.alert("تعذرت مشاركة الملف. يمكنك تنزيله بدلاً من ذلك.");
+                    })} variant="outline" className="gap-2 rounded-xl text-xs font-black"><Share2 size={16} /> مشاركة</Button>
+                  </div>
+                ) : (
+                  <div className="rounded-xl bg-gray-100 px-4 py-3 text-center text-xs font-black text-gray-400">PDF غير محفوظ محلياً</div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="col-span-full text-center py-24 bg-white border-2 border-dashed border-gray-100 rounded-[3rem]"><p className="text-gray-300 font-black">لا توجد تقارير محفوظة على هذا الجهاز</p></div>
+        )
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 animate-in zoom-in-95 duration-700">
-          {activeTab === "reports" ? (
-            reports.length > 0 ? (
-              reports.map((report) => (
-                <div key={report.id} className="shm-card group">
-                  <div className="w-12 h-12 shm-gradient text-white rounded-xl flex items-center justify-center mb-6 shadow-md shadow-primary/10 group-hover:scale-110 transition-transform">
-                    <span className="text-xl">📄</span>
-                  </div>
-                  <h3 className="font-black text-xl mb-3 text-gray-800 uppercase tracking-tight line-clamp-2 min-h-[3.5rem]">
-                    {report.title}
-                  </h3>
-                  <div className="text-sm text-gray-400 font-bold space-y-2 mb-6 border-t border-gray-50 pt-4">
-                    <p className="flex items-center gap-2">📍 {report.location}</p>
-                    <p className="flex items-center gap-2">🕒 {report.time}</p>
-                    <p className="flex items-center gap-2">📅 {new Date(report.created_at).toLocaleDateString("ar-MA")}</p>
-                  </div>
-                  {report.pdf_url ? (
-                    <a
-                      href={report.pdf_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center w-full shm-gradient text-white px-6 py-4 rounded-xl text-xs font-black uppercase tracking-widest shm-gradient-hover shadow-lg shadow-primary/10"
-                    >
-                      عرض ملف PDF
-                    </a>
-                  ) : (
-                    <div className="flex items-center justify-center w-full rounded-xl bg-gray-100 px-6 py-4 text-xs font-black text-gray-400">
-                      PDF غير متوفر بعد
-                    </div>
-                  )}
+        sessions.length ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {sessions.map((session) => (
+              <div key={session.id} className="shm-card group">
+                <div className="w-12 h-12 shm-gradient text-white rounded-xl flex items-center justify-center mb-6"><CalendarDays size={22} /></div>
+                <h3 className="font-black text-xl mb-3 text-gray-800 line-clamp-2">{session.title}</h3>
+                <div className="text-sm text-gray-400 font-bold space-y-2 mb-5 border-t border-gray-50 pt-4">
+                  <p>📅 {session.date ? new Date(session.date).toLocaleString("ar-MA") : new Date(session.createdAt).toLocaleDateString("ar-MA")}</p>
+                  <p>📍 {textValue(session.details.location)}</p>
+                  <p className="text-xs">{statusLabel(session.syncStatus)}</p>
                 </div>
-              ))
-            ) : (
-              <div className="col-span-full text-center py-24 bg-white border-2 border-dashed border-gray-100 rounded-[3rem]">
-                <p className="text-gray-300 font-black uppercase tracking-[0.2em]">لا توجد تقارير متاحة حالياً</p>
-              </div>
-            )
-          ) : (
-            sessions.length > 0 ? (
-              sessions.map((session) => (
-                <div key={session.id} className="shm-card group">
-                   <div className="w-12 h-12 shm-gradient text-white rounded-xl flex items-center justify-center mb-6 shadow-md shadow-primary/10 group-hover:scale-110 transition-transform">
-                    <span className="text-xl">📝</span>
-                  </div>
-                  <h3 className="font-black text-xl mb-3 text-gray-800 uppercase tracking-tight line-clamp-2 min-h-[3.5rem]">
-                    {session.title}
-                  </h3>
-                  <div className="text-sm text-gray-400 font-bold space-y-2 mb-6 border-t border-gray-50 pt-4">
-                    <p className="flex items-center gap-2">📍 {session.location}</p>
-                    <p className="flex items-center gap-2">🕒 {new Date(session.date_time).toLocaleString("ar-MA")}</p>
-                    <p className="flex items-center gap-2">📅 {new Date(session.created_at).toLocaleDateString("ar-MA")}</p>
-                  </div>
-                  <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl">
-                    <p className="text-xs font-bold text-blue-700 text-right">
-                      <span className="block font-black mb-2">📋 التفاصيل</span>
-                      <span className="block text-[10px] text-blue-600 mb-3">الهدف: {session.objective}</span>
-                      <span className="block text-[10px] text-blue-600">الفئة المستهدفة: {session.target_audience}</span>
-                    </p>
-                  </div>
+                <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl">
+                  <p className="text-xs font-bold text-blue-700 text-right">
+                    <span className="block font-black mb-2">📋 التفاصيل</span>
+                    <span className="block text-[10px] text-blue-600 mb-3">الهدف: {textValue(session.details.objective)}</span>
+                    <span className="block text-[10px] text-blue-600">الفئة المستهدفة: {textValue(session.details.targetAudience)}</span>
+                  </p>
                 </div>
-              ))
-            ) : (
-              <div className="col-span-full text-center py-24 bg-white border-2 border-dashed border-gray-100 rounded-[3rem]">
-                <p className="text-gray-300 font-black uppercase tracking-[0.2em]">لا توجد حصص متاحة حالياً</p>
               </div>
-            )
-          )}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-24 bg-white border-2 border-dashed border-gray-100 rounded-[3rem]"><p className="text-gray-300 font-black">لا توجد حصص محفوظة على هذا الجهاز</p></div>
+        )
       )}
     </Layout>
   );
