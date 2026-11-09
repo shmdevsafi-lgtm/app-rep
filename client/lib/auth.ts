@@ -1,7 +1,6 @@
 const SESSION_KEY = "shm_session_v2";
 const LEGACY_KEY = "isLoggedIn";
 export const SESSION_DURATION_MS = 720 * 60 * 60 * 1000; // 30 jours
-const ITERATIONS = 200_000;
 
 export interface Credentials {
   lastName: string;
@@ -11,45 +10,28 @@ export interface Credentials {
   password: string;
 }
 
-const enc = new TextEncoder();
-const toHex = (buf: ArrayBuffer) =>
-  Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+export async function login(credentials: Credentials): Promise<boolean> {
+  const response = await fetch("/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(credentials),
+  });
 
-const normalize = (c: Credentials) =>
-  [c.lastName.trim().toLowerCase(), c.firstName.trim().toLowerCase(), c.birthDate.trim(), c.pin.trim(), c.password].join("|");
+  if (!response.ok) return false;
+  const result = await response.json() as { ok?: boolean };
+  if (!result.ok) return false;
 
-async function derive(secret: string, salt: string): Promise<string> {
-  const key = await crypto.subtle.importKey("raw", enc.encode(secret), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: "SHA-256", salt: enc.encode(salt), iterations: ITERATIONS },
-    key,
-    256,
-  );
-  return toHex(bits);
-}
-
-function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
-export async function login(c: Credentials): Promise<boolean> {
-  const expected = import.meta.env.VITE_AUTH_HASH as string | undefined;
-  const salt = import.meta.env.VITE_AUTH_SALT as string | undefined;
-  if (!expected || !salt) return false;
-  const ok = safeEqual(await derive(normalize(c), salt), expected);
-  if (ok) {
-    const now = Date.now();
-    try {
-      localStorage.setItem(SESSION_KEY, JSON.stringify({ v: 1, issuedAt: now, expiresAt: now + SESSION_DURATION_MS }));
-      localStorage.removeItem(LEGACY_KEY);
-    } catch {
-      return false;
-    }
+  const now = Date.now();
+  try {
+    localStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify({ v: 1, issuedAt: now, expiresAt: now + SESSION_DURATION_MS }),
+    );
+    localStorage.removeItem(LEGACY_KEY);
+    return true;
+  } catch {
+    return false;
   }
-  return ok;
 }
 
 export function isSessionValid(): boolean {
@@ -74,6 +56,6 @@ export function clearSession(): void {
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(LEGACY_KEY);
   } catch {
-    /* ignore */
+    // Ignore storage errors.
   }
 }
