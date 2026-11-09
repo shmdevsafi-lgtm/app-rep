@@ -33,8 +33,8 @@ jobs:
           VITE_OFFLINE_LOGIN_SALT: ${{ secrets.VITE_OFFLINE_LOGIN_SALT }}
           VITE_OFFLINE_LOGIN_HASH: ${{ secrets.VITE_OFFLINE_LOGIN_HASH }}
         run: |
-          test -n "$VITE_SUPABASE_URL" || (echo "Missing VITE_SUPABASE_URL." && exit 1)
-          test -n "$VITE_SUPABASE_ANON_KEY" || (echo "Missing VITE_SUPABASE_ANON_KEY." && exit 1)
+          test -n "$VITE_OFFLINE_LOGIN_SALT" || (echo "Missing GitHub Actions Secret: VITE_OFFLINE_LOGIN_SALT." && exit 1)
+          test -n "$VITE_OFFLINE_LOGIN_HASH" || (echo "Missing GitHub Actions Secret: VITE_OFFLINE_LOGIN_HASH." && exit 1)
           pnpm run build:client
 
       - name: Setup Java
