@@ -35,7 +35,7 @@ export default function Login() {
       return;
     }
 
-    if (!/^\\d+$/.test(formData.pin)) {
+    if (!/^\d+$/.test(formData.pin)) {
       setError("يجب أن يتكون رمز PIN من أرقام فقط.");
       setFieldErrors({ pin: true });
       return;
