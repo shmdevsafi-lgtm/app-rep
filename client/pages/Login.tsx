@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import Header from "@/components/Header";
 import { cn } from "@/lib/utils";
+import { login } from "@/lib/auth";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -14,6 +15,7 @@ export default function Login() {
   });
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
+  const [submitting, setSubmitting] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -23,38 +25,34 @@ export default function Login() {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setFieldErrors({});
 
-    // Validation
     if (!formData.firstName || !formData.lastName || !formData.birthDate || !formData.pin || !formData.password) {
       setError("الرجاء ملء جميع الحقول.");
       return;
     }
 
-    // PIN validation (digits only)
-    if (!/^\d+$/.test(formData.pin)) {
+    if (!/^\\d+$/.test(formData.pin)) {
       setError("يجب أن يتكون رمز PIN من أرقام فقط.");
       setFieldErrors({ pin: true });
       return;
     }
 
-    // Specific credentials check
-    const errors: Record<string, boolean> = {};
-    if (formData.lastName !== "Belkhadir") errors.lastName = true;
-    if (formData.firstName !== "Adnane") errors.firstName = true;
-    if (formData.birthDate !== "2009-11-06") errors.birthDate = true;
-    if (formData.pin !== "1594872630852369741") errors.pin = true;
-    if (formData.password !== "ADNANE@33") errors.password = true;
-
-    if (Object.keys(errors).length === 0) {
-      localStorage.setItem("isLoggedIn", "true");
-      navigate("/dashboard");
-    } else {
-      setError("معلومات تسجيل الدخول غير صحيحة. يرجى التحقق من الحقول المميزة باللون الأحمر.");
-      setFieldErrors(errors);
+    setSubmitting(true);
+    try {
+      const ok = await login(formData);
+      if (ok) {
+        navigate("/dashboard", { replace: true });
+      } else {
+        setError("معلومات تسجيل الدخول غير صحيحة.");
+      }
+    } catch {
+      setError("تعذر التحقق من المعلومات على هذا الجهاز.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -168,6 +166,7 @@ export default function Login() {
             <div className="pt-6">
               <button
                 type="submit"
+                disabled={submitting}
                 className="w-full shm-gradient text-white font-black py-4 rounded-2xl transition-all shm-gradient-hover shadow-lg shadow-primary/20 uppercase tracking-widest"
               >
                 تسجيل الدخول
