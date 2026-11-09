@@ -1,0 +1,69 @@
+name: Build APK Android
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    # Version figÃ©e : "ubuntu-latest" migre vers Ubuntu 26 le 19/10/2026
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm doit Ãªtre installÃ© AVANT setup-node (car cache: 'pnpm' en dÃ©pend).
+      # Pas de "version:" ici : la v4 la lit dans "packageManager" du package.json
+      # (pnpm@10.14.0). Indiquer les deux provoque une erreur.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build web app
+        run: pnpm run build:client
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      # Le SDK Android est prÃ©installÃ© sur les runners GitHub.
+      # L'action android-actions/setup-android (v2 et v3) Ã©choue avec
+      # "Failed to find package 'tools'" : on la supprime et on pointe
+      # simplement vers le SDK existant.
+      - name: Configure Android SDK
+        run: |
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
+
+      - name: Setup Capacitor (dev deps)
+        run: pnpm add -D @capacitor/core @capacitor/cli @capacitor/android
+
+      - name: Add Android platform
+        run: pnpm exec cap add android
+
+      - name: Sync Capacitor
+        run: pnpm exec cap sync
+
+      - name: Build Android (debug)
+        run: |
+          cd android
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug.apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
