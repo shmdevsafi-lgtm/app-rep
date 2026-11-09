@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
+import { clearOfflineSession } from "@/lib/auth/offlineSession";
 import {
   X,
   LayoutDashboard,
@@ -34,7 +35,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   }, [location.pathname]);
 
   const handleLogout = () => {
-    localStorage.removeItem("isLoggedIn");
+    clearOfflineSession();
     onClose();
     navigate("/login");
   };
