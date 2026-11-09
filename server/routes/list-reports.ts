@@ -1,23 +1,18 @@
-import { RequestHandler } from "express";
-import { supabaseAdmin } from "../lib/supabase";
+import type { RequestHandler } from "express";
+import { getSupabaseAdmin } from "../lib/supabase";
 
 export const handleListReports: RequestHandler = async (_req, res) => {
+  const supabaseAdmin = getSupabaseAdmin();
   const [reportsResult, sessionsResult] = await Promise.all([
-    supabaseAdmin.from("reports").select("*").order("created_at", { ascending: false }),
-    supabaseAdmin.from("sessions").select("*").order("created_at", { ascending: false }),
+    supabaseAdmin.from("reports").select("*").order("created_at", { ascending: false }).limit(500),
+    supabaseAdmin.from("sessions").select("*").order("created_at", { ascending: false }).limit(500),
   ]);
 
-  if (reportsResult.error && sessionsResult.error) {
-    console.error("Documents listing error:", reportsResult.error, sessionsResult.error);
-    res.status(500).json({
-      error: reportsResult.error.message || sessionsResult.error.message || "Unable to fetch documents",
-      code: reportsResult.error.code || sessionsResult.error.code || "",
-    });
+  if (reportsResult.error || sessionsResult.error) {
+    console.error("Documents listing failed:", reportsResult.error?.code, sessionsResult.error?.code);
+    res.status(500).json({ error: "Impossible de récupérer les documents" });
     return;
   }
-
-  if (reportsResult.error) console.error("Reports listing error:", reportsResult.error);
-  if (sessionsResult.error) console.error("Sessions listing error:", sessionsResult.error);
 
   res.json({
     reports: reportsResult.data || [],
