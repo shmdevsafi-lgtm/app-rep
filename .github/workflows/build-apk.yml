@@ -2,22 +2,18 @@ name: Build APK Android
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [ main, main1.0, master, develop ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, main1.0, master ]
   workflow_dispatch:
 
 jobs:
   build:
-    # Version figÃ©e : "ubuntu-latest" migre vers Ubuntu 26 le 19/10/2026
     runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
 
-      # pnpm doit Ãªtre installÃ© AVANT setup-node (car cache: 'pnpm' en dÃ©pend).
-      # Pas de "version:" ici : la v4 la lit dans "packageManager" du package.json
-      # (pnpm@10.14.0). Indiquer les deux provoque une erreur.
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
@@ -34,9 +30,14 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_OFFLINE_LOGIN_LAST_NAME: ${{ secrets.VITE_OFFLINE_LOGIN_LAST_NAME || vars.VITE_OFFLINE_LOGIN_LAST_NAME }}
+          VITE_OFFLINE_LOGIN_FIRST_NAME: ${{ secrets.VITE_OFFLINE_LOGIN_FIRST_NAME || vars.VITE_OFFLINE_LOGIN_FIRST_NAME }}
+          VITE_OFFLINE_LOGIN_BIRTH_DATE: ${{ secrets.VITE_OFFLINE_LOGIN_BIRTH_DATE || vars.VITE_OFFLINE_LOGIN_BIRTH_DATE }}
+          VITE_OFFLINE_LOGIN_PIN: ${{ secrets.VITE_OFFLINE_LOGIN_PIN || vars.VITE_OFFLINE_LOGIN_PIN }}
+          VITE_OFFLINE_LOGIN_PASSWORD: ${{ secrets.VITE_OFFLINE_LOGIN_PASSWORD || vars.VITE_OFFLINE_LOGIN_PASSWORD }}
         run: |
-          test -n "$VITE_SUPABASE_URL" || (echo "Missing VITE_SUPABASE_URL: configure it as a GitHub Actions variable or secret." && exit 1)
-          test -n "$VITE_SUPABASE_ANON_KEY" || (echo "Missing VITE_SUPABASE_ANON_KEY: configure it as a GitHub Actions variable or secret." && exit 1)
+          test -n "$VITE_SUPABASE_URL" || (echo "Missing VITE_SUPABASE_URL." && exit 1)
+          test -n "$VITE_SUPABASE_ANON_KEY" || (echo "Missing VITE_SUPABASE_ANON_KEY." && exit 1)
           pnpm run build:client
 
       - name: Setup Java
@@ -45,10 +46,6 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      # Le SDK Android est prÃ©installÃ© sur les runners GitHub.
-      # L'action android-actions/setup-android (v2 et v3) Ã©choue avec
-      # "Failed to find package 'tools'" : on la supprime et on pointe
-      # simplement vers le SDK existant.
       - name: Configure Android SDK
         run: |
           echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
