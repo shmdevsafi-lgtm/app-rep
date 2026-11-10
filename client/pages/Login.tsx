@@ -141,7 +141,7 @@ export default function Login() {
             </div>
           </form>
           <div className="mt-8 text-center">
-            <p className="text-[10px] text-gray-300 font-bold uppercase tracking-[0.2em]">Version 1.2.0 • SHM Digital</p>
+            <p className="text-[10px] text-gray-300 font-bold uppercase tracking-[0.2em]">Version 2.2.0 • SHM-ECOS <br /> CREATED BY A.B</p>
           </div>
         </div>
       </div>
