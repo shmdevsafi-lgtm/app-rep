@@ -2,7 +2,9 @@ import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import Header from "@/components/Header";
 import { cn } from "@/lib/utils";
-import { login } from "@/lib/auth";
+
+const SESSION_DAYS = 30;
+const SESSION_KEY = "shm_session_expiry";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -15,17 +17,13 @@ export default function Login() {
   });
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
-  const [submitting, setSubmitting] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setFieldErrors({});
@@ -41,18 +39,20 @@ export default function Login() {
       return;
     }
 
-    setSubmitting(true);
-    try {
-      const ok = await login(formData);
-      if (ok) {
-        navigate("/dashboard", { replace: true });
-      } else {
-        setError("معلومات تسجيل الدخول غير صحيحة.");
-      }
-    } catch {
-      setError("تعذر التحقق من المعلومات على هذا الجهاز.");
-    } finally {
-      setSubmitting(false);
+    const errors: Record<string, boolean> = {};
+    if (formData.lastName !== import.meta.env.VITE_LOGIN_LAST_NAME) errors.lastName = true;
+    if (formData.firstName !== import.meta.env.VITE_LOGIN_FIRST_NAME) errors.firstName = true;
+    if (formData.birthDate !== import.meta.env.VITE_LOGIN_BIRTH_DATE) errors.birthDate = true;
+    if (formData.pin !== import.meta.env.VITE_LOGIN_PIN) errors.pin = true;
+    if (formData.password !== import.meta.env.VITE_LOGIN_PASSWORD) errors.password = true;
+
+    if (Object.keys(errors).length === 0) {
+      localStorage.setItem("isLoggedIn", "true");
+      localStorage.setItem(SESSION_KEY, String(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000));
+      navigate("/dashboard");
+    } else {
+      setError("معلومات تسجيل الدخول غير صحيحة. يرجى التحقق من الحقول المميزة باللون الأحمر.");
+      setFieldErrors(errors);
     }
   };
 
@@ -67,12 +67,8 @@ export default function Login() {
               alt="Logo SHM"
               className="w-24 h-24 mx-auto mb-6 object-contain animate-bounce duration-&lsqb;3s&rsqb;"
             />
-            <h1 className="text-3xl font-black shm-text-gradient mb-2">
-              تسجيل الدخول
-            </h1>
-            <p className="text-gray-400 text-sm font-medium tracking-wide uppercase">
-              بوابة الكشافة الحسنية
-            </p>
+            <h1 className="text-3xl font-black shm-text-gradient mb-2">تسجيل الدخول</h1>
+            <p className="text-gray-400 text-sm font-medium tracking-wide uppercase">بوابة الكشافة الحسنية</p>
           </div>
 
           {error && (
@@ -88,14 +84,9 @@ export default function Login() {
                 الاسم العائلي
               </label>
               <input
-                type="text"
-                name="lastName"
-                value={formData.lastName}
-                onChange={handleChange}
-                className={cn(
-                  "w-full px-5 py-3.5 bg-gray-50 border-2 rounded-2xl focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all font-bold",
-                  fieldErrors.lastName ? "border-red-200 text-red-600 bg-red-50" : "border-transparent focus:bg-white focus:border-primary/20"
-                )}
+                type="text" name="lastName" value={formData.lastName} onChange={handleChange}
+                className={cn("w-full px-5 py-3.5 bg-gray-50 border-2 rounded-2xl focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all font-bold",
+                  fieldErrors.lastName ? "border-red-200 text-red-600 bg-red-50" : "border-transparent focus:bg-white focus:border-primary/20")}
               />
             </div>
 
@@ -104,14 +95,9 @@ export default function Login() {
                 الاسم الشخصي
               </label>
               <input
-                type="text"
-                name="firstName"
-                value={formData.firstName}
-                onChange={handleChange}
-                className={cn(
-                  "w-full px-5 py-3.5 bg-gray-50 border-2 rounded-2xl focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all font-bold",
-                  fieldErrors.firstName ? "border-red-200 text-red-600 bg-red-50" : "border-transparent focus:bg-white focus:border-primary/20"
-                )}
+                type="text" name="firstName" value={formData.firstName} onChange={handleChange}
+                className={cn("w-full px-5 py-3.5 bg-gray-50 border-2 rounded-2xl focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all font-bold",
+                  fieldErrors.firstName ? "border-red-200 text-red-600 bg-red-50" : "border-transparent focus:bg-white focus:border-primary/20")}
               />
             </div>
 
@@ -120,14 +106,9 @@ export default function Login() {
                 تاريخ الازدياد
               </label>
               <input
-                type="date"
-                name="birthDate"
-                value={formData.birthDate}
-                onChange={handleChange}
-                className={cn(
-                  "w-full px-5 py-3.5 bg-gray-50 border-2 rounded-2xl focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all font-bold",
-                  fieldErrors.birthDate ? "border-red-200 text-red-600 bg-red-50" : "border-transparent focus:bg-white focus:border-primary/20"
-                )}
+                type="date" name="birthDate" value={formData.birthDate} onChange={handleChange}
+                className={cn("w-full px-5 py-3.5 bg-gray-50 border-2 rounded-2xl focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all font-bold",
+                  fieldErrors.birthDate ? "border-red-200 text-red-600 bg-red-50" : "border-transparent focus:bg-white focus:border-primary/20")}
               />
             </div>
 
@@ -136,14 +117,9 @@ export default function Login() {
                 رمز PIN
               </label>
               <input
-                type="text"
-                name="pin"
-                value={formData.pin}
-                onChange={handleChange}
-                className={cn(
-                  "w-full px-5 py-3.5 bg-gray-50 border-2 rounded-2xl focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all font-bold",
-                  fieldErrors.pin ? "border-red-200 text-red-600 bg-red-50" : "border-transparent focus:bg-white focus:border-primary/20"
-                )}
+                type="text" name="pin" value={formData.pin} onChange={handleChange}
+                className={cn("w-full px-5 py-3.5 bg-gray-50 border-2 rounded-2xl focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all font-bold",
+                  fieldErrors.pin ? "border-red-200 text-red-600 bg-red-50" : "border-transparent focus:bg-white focus:border-primary/20")}
               />
             </div>
 
@@ -152,29 +128,20 @@ export default function Login() {
                 كلمة المرور
               </label>
               <input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                className={cn(
-                  "w-full px-5 py-3.5 bg-gray-50 border-2 rounded-2xl focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all font-bold",
-                  fieldErrors.password ? "border-red-200 text-red-600 bg-red-50" : "border-transparent focus:bg-white focus:border-primary/20"
-                )}
+                type="password" name="password" value={formData.password} onChange={handleChange}
+                className={cn("w-full px-5 py-3.5 bg-gray-50 border-2 rounded-2xl focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all font-bold",
+                  fieldErrors.password ? "border-red-200 text-red-600 bg-red-50" : "border-transparent focus:bg-white focus:border-primary/20")}
               />
             </div>
 
             <div className="pt-6">
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full shm-gradient text-white font-black py-4 rounded-2xl transition-all shm-gradient-hover shadow-lg shadow-primary/20 uppercase tracking-widest"
-              >
+              <button type="submit" className="w-full shm-gradient text-white font-black py-4 rounded-2xl transition-all shm-gradient-hover shadow-lg shadow-primary/20 uppercase tracking-widest">
                 تسجيل الدخول
               </button>
             </div>
           </form>
           <div className="mt-8 text-center">
-            <p className="text-[10px] text-gray-300 font-bold uppercase tracking-[0.2em]">Version 1.1.0 • SHM Digital</p>
+            <p className="text-[10px] text-gray-300 font-bold uppercase tracking-[0.2em]">Version 1.2.0 • SHM Digital</p>
           </div>
         </div>
       </div>
