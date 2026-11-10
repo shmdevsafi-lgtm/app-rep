@@ -3,7 +3,7 @@ import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { offlineStorage, StoredReport, StoredSession } from "@/lib/storage/offlineStorage";
 import { syncManager } from "@/lib/sync/syncManager";
-import { RefreshCw, UploadCloud, CheckCircle2, AlertCircle, Clock } from "lucide-react";
+import { RefreshCw, UploadCloud, CheckCircle2, AlertCircle, Clock, Download } from "lucide-react";
 
 export default function SyncCache() {
   const [reports, setReports] = useState<StoredReport[]>([]);
@@ -91,7 +91,7 @@ export default function SyncCache() {
             ) : (
               <div className="space-y-3">
                 {reports.map((r) => (
-                  <CacheRow key={r.id} title={r.title} createdAt={r.createdAt} status={r.syncStatus} errorMessage={r.errorMessage} />
+                  <CacheRow key={r.id} title={r.title} createdAt={r.createdAt} status={r.syncStatus} errorMessage={r.errorMessage} pdfBase64={r.pdfBase64} />
                 ))}
               </div>
             )}
@@ -128,11 +128,13 @@ function CacheRow({
   createdAt,
   status,
   errorMessage,
+  pdfBase64,
 }: {
   title: string;
   createdAt: string;
   status: "pending" | "synced" | "failed";
   errorMessage?: string;
+  pdfBase64?: string;
 }) {
   const badge =
     status === "synced" ? (
@@ -149,6 +151,17 @@ function CacheRow({
       </span>
     );
 
+  // Télécharge le PDF déjà stocké localement, sans accès réseau.
+  const handleDownload = () => {
+    if (!pdfBase64) return;
+    const a = document.createElement("a");
+    a.href = pdfBase64.startsWith("data:") ? pdfBase64 : `data:application/pdf;base64,${pdfBase64}`;
+    a.download = `${title || "تقرير"}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
   return (
     <div className="flex items-center justify-between gap-4 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
       <div className="min-w-0 flex-1 text-right">
@@ -158,7 +171,18 @@ function CacheRow({
           <p className="mt-1 break-all text-[10px] font-mono text-red-400">{errorMessage}</p>
         )}
       </div>
-      {badge}
+      <div className="flex items-center gap-2">
+        {pdfBase64 && (
+          <button
+            onClick={handleDownload}
+            className="flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1.5 text-xs font-black text-gray-600 hover:bg-gray-100"
+            aria-label="تحميل PDF"
+          >
+            <Download size={14} /> تحميل
+          </button>
+        )}
+        {badge}
+      </div>
     </div>
   );
 }
