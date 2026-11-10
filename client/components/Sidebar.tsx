@@ -35,10 +35,11 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   }, [location.pathname]);
 
   const handleLogout = () => {
-    clearSession();
-    onClose();
-    navigate("/login");
-  };
+  localStorage.removeItem("isLoggedIn");
+  localStorage.removeItem("shm_session_expiry");
+  onClose();
+  navigate("/login");
+};
 
   return (
     <>
