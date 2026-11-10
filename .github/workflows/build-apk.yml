@@ -9,13 +9,13 @@ on:
 
 jobs:
   build:
-    # Version figÃ©e : "ubuntu-latest" migre vers Ubuntu 26 le 19/10/2026
+    # Version figée : "ubuntu-latest" migre vers Ubuntu 26 le 19/10/2026
     runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
 
-      # pnpm doit Ãªtre installÃ© AVANT setup-node (car cache: 'pnpm' en dÃ©pend).
+      # pnpm doit être installé AVANT setup-node (car cache: 'pnpm' en dépend).
       # Pas de "version:" ici : la v4 la lit dans "packageManager" du package.json
       # (pnpm@10.14.0). Indiquer les deux provoque une erreur.
       - name: Setup pnpm
@@ -31,17 +31,15 @@ jobs:
         run: pnpm install --no-frozen-lockfile
 
       - name: Build web app
+        run: pnpm run build:client
         env:
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_AUTH_SALT: ${{ secrets.VITE_AUTH_SALT }}
-          VITE_AUTH_HASH: ${{ secrets.VITE_AUTH_HASH }}
-        run: |
-          test -n "$VITE_SUPABASE_URL" || (echo "Missing VITE_SUPABASE_URL: configure it as a GitHub Actions variable or secret." && exit 1)
-          test -n "$VITE_SUPABASE_ANON_KEY" || (echo "Missing VITE_SUPABASE_ANON_KEY: configure it as a GitHub Actions variable or secret." && exit 1)
-          test -n "$VITE_AUTH_SALT" || (echo "Missing VITE_AUTH_SALT: configure it as a GitHub Actions secret." && exit 1)
-          test -n "$VITE_AUTH_HASH" || (echo "Missing VITE_AUTH_HASH: configure it as a GitHub Actions secret." && exit 1)
-          pnpm run build:client
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_LOGIN_LAST_NAME: ${{ secrets.VITE_LOGIN_LAST_NAME }}
+          VITE_LOGIN_FIRST_NAME: ${{ secrets.VITE_LOGIN_FIRST_NAME }}
+          VITE_LOGIN_BIRTH_DATE: ${{ secrets.VITE_LOGIN_BIRTH_DATE }}
+          VITE_LOGIN_PIN: ${{ secrets.VITE_LOGIN_PIN }}
+          VITE_LOGIN_PASSWORD: ${{ secrets.VITE_LOGIN_PASSWORD }}
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -49,8 +47,8 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      # Le SDK Android est prÃ©installÃ© sur les runners GitHub.
-      # L'action android-actions/setup-android (v2 et v3) Ã©choue avec
+      # Le SDK Android est préinstallé sur les runners GitHub.
+      # L'action android-actions/setup-android (v2 et v3) échoue avec
       # "Failed to find package 'tools'" : on la supprime et on pointe
       # simplement vers le SDK existant.
       - name: Configure Android SDK
