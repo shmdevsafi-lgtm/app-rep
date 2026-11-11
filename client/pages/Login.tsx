@@ -2,9 +2,9 @@ import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import Header from "@/components/Header";
 import { cn } from "@/lib/utils";
+import { SESSION_DURATION_MS } from "@/lib/auth";
 
-const SESSION_DAYS = 30;
-const SESSION_KEY = "shm_session_expiry";
+const SESSION_KEY = "shm_session_v2";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -47,8 +47,8 @@ export default function Login() {
     if (formData.password !== import.meta.env.VITE_LOGIN_PASSWORD) errors.password = true;
 
     if (Object.keys(errors).length === 0) {
-      localStorage.setItem("isLoggedIn", "true");
-      localStorage.setItem(SESSION_KEY, String(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000));
+      const now = Date.now();
+      localStorage.setItem(SESSION_KEY, JSON.stringify({ v: 1, issuedAt: now, expiresAt: now + SESSION_DURATION_MS }));
       navigate("/dashboard");
     } else {
       setError("معلومات تسجيل الدخول غير صحيحة. يرجى التحقق من الحقول المميزة باللون الأحمر.");
